@@ -1,0 +1,2275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>SPZ Positioning Test</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📐</text></svg>">
+    <script src="Build/CesiumUnminified/Cesium.js"></script>
+    <style>
+        @import url(Build/CesiumUnminified/Widgets/widgets.css);
+        html, body, #cesiumContainer {
+            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+        }
+        
+        #toolbar {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            max-width: 300px;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+        }
+        
+        #transform-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(42, 42, 42, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            z-index: 1000;
+            width: 280px;
+            max-height: calc(100vh - 20px);
+            overflow-y: auto;
+        }
+        
+        button {
+            margin: 5px 0;
+            padding: 8px 12px;
+            background: #48b;
+            border: none;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            display: block;
+            width: 100%;
+            font-size: 12px;
+        }
+        
+        button:hover {
+            background: #5ac;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .section {
+            margin: 10px 0;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        
+        .section h4 {
+            margin: 0 0 8px 0;
+            font-size: 14px;
+            color: #8cf;
+        }
+        
+        .transform-controls {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 4px;
+            padding: 10px;
+            margin: 8px 0;
+        }
+        
+        .transform-group {
+            margin: 8px 0;
+        }
+        
+        .transform-group label {
+            display: block;
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 4px;
+        }
+        
+        .transform-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        
+        .transform-row span {
+            width: 12px;
+            text-align: center;
+            font-size: 10px;
+            color: #ccc;
+        }
+        
+        .transform-row input[type="range"] {
+            flex: 1;
+            height: 18px;
+        }
+        
+        .transform-row input[type="number"] {
+            width: 50px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #666;
+            color: white;
+            font-size: 10px;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        
+        .export-btn {
+            background: #4a7c59 !important;
+            font-size: 11px !important;
+        }
+        
+        .export-btn:hover {
+            background: #5d966d !important;
+        }
+        
+        
+        #status {
+            margin-top: 10px;
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 8px;
+            border-radius: 4px;
+            max-height: 100px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="cesiumContainer"></div>
+    <div id="toolbar">
+        <h3>🎯 SPZ Transform Editor</h3>
+        
+        <div class="section">
+            <h4>Controls</h4>
+            <button onclick="toggleGeoJSONVisibility()">👁️ Toggle GeoJSON Visibility</button>
+            <button onclick="toggleRotationSheet()">📐 Toggle Rotation Sheet</button>
+            <button onclick="toggleMarkerMode()">📍 Place Marker (M key)</button>
+            <button onclick="clearMarkers()">🗑️ Clear Markers</button>
+            <button onclick="showDiagnostics()">Show Diagnostics</button>
+            <button onclick="testTransformUpdate()">Test Transform Update</button>
+            <button onclick="testWorldRotation()">🌍 Test World Rotation</button>
+            <button onclick="exploreTilesetStructure()">🔍 Explore Tileset</button>
+            <button onclick="logCurrentState()">Log Current State</button>
+        </div>
+        
+        <div id="status">Loading SPZ and GeoJSON...</div>
+    </div>
+    
+    <div id="transform-panel">
+        <h3>🎮 Transform Controls</h3>
+        
+        <div class="transform-controls">
+            <div class="transform-group">
+                <label>Position (LIVE - affects tileset)</label>
+                <div class="transform-row">
+                    <span>X</span>
+                    <input type="range" id="posX" min="-2000" max="2000" value="0" step="1" oninput="syncNumberInput('posXVal', this.value); updateTransform();">
+                    <input type="number" id="posXVal" value="0" step="0.1" onchange="syncSlider('posX', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Y</span>
+                    <input type="range" id="posY" min="-2000" max="2000" value="0" step="1" oninput="syncNumberInput('posYVal', this.value); updateTransform();">
+                    <input type="number" id="posYVal" value="0" step="0.1" onchange="syncSlider('posY', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Z</span>
+                    <input type="range" id="posZ" min="-200" max="10000" value="0" step="1" oninput="syncNumberInput('posZVal', this.value); updateTransform();">
+                    <input type="number" id="posZVal" value="0" step="0.1" onchange="syncSlider('posZ', this.value); updateTransform()">
+                </div>
+            </div>
+            
+            <div class="transform-group">
+                <label>Rotation (degrees) - LIVE - affects tileset</label>
+                <div class="transform-row">
+                    <span>X</span>
+                    <input type="range" id="rotX" min="-180" max="180" value="0" step="1" oninput="syncNumberInput('rotXVal', this.value); updateTransform();">
+                    <input type="number" id="rotXVal" value="0" step="0.1" onchange="syncSlider('rotX', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Y</span>
+                    <input type="range" id="rotY" min="-180" max="180" value="0" step="1" oninput="syncNumberInput('rotYVal', this.value); updateTransform();">
+                    <input type="number" id="rotYVal" value="0" step="0.1" onchange="syncSlider('rotY', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Z</span>
+                    <input type="range" id="rotZ" min="-180" max="180" value="0" step="1" oninput="syncNumberInput('rotZVal', this.value); updateTransform();">
+                    <input type="number" id="rotZVal" value="0" step="0.1" onchange="syncSlider('rotZ', this.value); updateTransform()">
+                </div>
+            </div>
+            
+            <div class="transform-group">
+                <label>Scale - LIVE - affects tileset</label>
+                <div class="transform-row">
+                    <span>X</span>
+                    <input type="range" id="scaleX" min="0" max="100" value="1" step="0.01" oninput="syncNumberInput('scaleXVal', this.value); updateTransform();">
+                    <input type="number" id="scaleXVal" value="1" step="0.01" onchange="syncSlider('scaleX', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Y</span>
+                    <input type="range" id="scaleY" min="0" max="100" value="1" step="0.01" oninput="syncNumberInput('scaleYVal', this.value); updateTransform();">
+                    <input type="number" id="scaleYVal" value="1" step="0.01" onchange="syncSlider('scaleY', this.value); updateTransform()">
+                </div>
+                <div class="transform-row">
+                    <span>Z</span>
+                    <input type="range" id="scaleZ" min="0" max="100" value="1" step="0.01" oninput="syncNumberInput('scaleZVal', this.value); updateTransform();">
+                    <input type="number" id="scaleZVal" value="1" step="0.01" onchange="syncSlider('scaleZ', this.value); updateTransform()">
+                </div>
+            </div>
+            
+            <button onclick="resetTransform()">Reset Transform</button>
+            <button class="export-btn" onclick="exportTransform()">Export Transform Matrix</button>
+        </div>
+    </div>
+    
+    <script>
+        // Set access token for private assets
+        Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5MjliMTAwZC0yNTE4LTQ5MDMtODRlYy00MGIxMTg4NTQ0YzkiLCJpZCI6MjQzMTg3LCJpYXQiOjE3NDk2MDQ4MzZ9.u83AqBjOkC2ESDQsylIlYSwE8Br5Je0Hchir3zi3KG8';
+
+        const viewer = new Cesium.Viewer("cesiumContainer", {
+            terrain: Cesium.Terrain.fromWorldTerrain(),
+        });
+        
+        // Transform control variables
+        let currentTileset = null;
+        let baseTransform = null; // Store the base transform (position) to apply rotations/scale on top
+        let referencePosition = null; // Fixed reference position for 0,0,0 controls (set once, never changes)
+        let rotationSheet = null; // Rotation visualization sheet
+        let originalRotationValues = { x: 0, y: 0, z: 0 }; // Store original rotation to avoid matrix decomposition issues
+        
+        // Positioning marker variables
+        let markerMode = false; // Whether marker placement mode is active
+        let markerDataSource = null; // DataSource for positioning markers
+        let markerCount = 0; // Counter for marker names
+        
+        // Local rotation controls variables
+        let localRotationControls = null; // DataSource for local rotation control axes
+        let isDragging = false; // Whether user is currently dragging a rotation axis
+        let dragAxis = null; // Which axis is being dragged ('x', 'y', or 'z')
+        let lastMousePosition = null; // Last mouse position for drag calculation
+        let currentLocalRotation = { x: 0, y: 0, z: 0 }; // Local space rotations applied to sheet
+        let dragStartRotation = { x: 0, y: 0, z: 0 }; // Rotation values when drag started
+        let accumulatedDragRotation = 0; // Total rotation applied during current drag
+        
+        // Initialize transform controls
+        function initializeTransformControls() {
+            // Sync all sliders with their number inputs
+            ['posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ', 'scaleX', 'scaleY', 'scaleZ'].forEach(id => {
+                const slider = document.getElementById(id);
+                const numberInput = document.getElementById(id + 'Val');
+                numberInput.value = slider.value;
+            });
+        }
+        
+        // Sync slider with number input
+        function syncSlider(sliderId, value) {
+            document.getElementById(sliderId).value = value;
+        }
+        
+        // Sync number input with slider
+        function syncNumberInput(numberId, value) {
+            document.getElementById(numberId).value = value;
+        }
+        
+        // Update transform in real-time (POSITION + ROTATION + SCALE - all LIVE!)
+        async function updateTransform() {
+            console.log('🔄 updateTransform() called - POSITION + ROTATION + SCALE LIVE!');
+            console.log('currentTileset:', currentTileset);
+            console.log('baseTransform:', baseTransform);
+            
+            if (!currentTileset) {
+                console.warn('⚠️ No current tileset!');
+                updateStatus('⚠️ No tileset loaded - cannot update transform');
+                return;
+            }
+            
+            if (!baseTransform) {
+                console.warn('⚠️ No base transform!');
+                updateStatus('⚠️ No base transform - cannot update');
+                return;
+            }
+            
+            // Get current position values from NUMBER INPUTS (to preserve decimals)
+            const posX = parseFloat(document.getElementById('posXVal').value);
+            const posY = parseFloat(document.getElementById('posYVal').value);
+            const posZ = parseFloat(document.getElementById('posZVal').value);
+            
+            // Get rotation/scale values from NUMBER INPUTS (to preserve decimals)
+            const rotX = parseFloat(document.getElementById('rotXVal').value);
+            const rotY = parseFloat(document.getElementById('rotYVal').value);
+            const rotZ = parseFloat(document.getElementById('rotZVal').value);
+            const scaleX = parseFloat(document.getElementById('scaleXVal').value);
+            const scaleY = parseFloat(document.getElementById('scaleYVal').value);
+            const scaleZ = parseFloat(document.getElementById('scaleZVal').value);
+            
+            console.log('Position values (LIVE):', { posX, posY, posZ });
+            console.log('Rotation values (LIVE):', { rotX, rotY, rotZ });
+            console.log('Scale values (LIVE):', { scaleX, scaleY, scaleZ });
+            
+            // Apply position, rotation, and scale changes to the tileset
+            // Use the fixed reference position (set once during setup) and apply offsets
+            if (!referencePosition) {
+                console.warn('⚠️ No reference position set! Using current position as reference.');
+                const currentTransform = currentTileset.root.transform;
+                referencePosition = Cesium.Matrix4.getTranslation(currentTransform, new Cesium.Cartesian3());
+            }
+            
+            console.log('Using FIXED reference position for 0,0,0:', referencePosition);
+            
+            // Apply position offset in GEOGRAPHIC space (like before)
+            const referenceCartographic = Cesium.Cartographic.fromCartesian(referencePosition);
+            let position;
+            if (referenceCartographic) {
+                const baseLongitude = Cesium.Math.toDegrees(referenceCartographic.longitude);
+                const baseLatitude = Cesium.Math.toDegrees(referenceCartographic.latitude);
+                const baseHeight = referenceCartographic.height;
+                position = Cesium.Cartesian3.fromDegrees(
+                    baseLongitude + (posX * 0.00001), // Convert meters to approximate degrees
+                    baseLatitude + (posY * 0.00001),
+                    baseHeight + posZ
+                );
+                console.log('Applied geographic offset to reference position:', { baseLongitude, baseLatitude, baseHeight, posX, posY, posZ });
+            } else {
+                // Fallback - apply offset in cartesian space
+                const offset = new Cesium.Cartesian3(posX, posY, posZ);
+                position = Cesium.Cartesian3.add(referencePosition, offset, new Cesium.Cartesian3());
+                console.log('Applied cartesian offset to reference position:', { offset, newPosition: position });
+            }
+            console.log('New position:', position);
+            
+            // Step 1: Start with the original baseline transform (preserves original rotation)
+            const parsedTransform = await parseTransformFromTilesetJson();
+            let transform;
+            
+            if (parsedTransform && parsedTransform.fullMatrix) {
+                // Use original transform as baseline
+                transform = Cesium.Matrix4.fromArray(parsedTransform.fullMatrix);
+                
+                // Update only the position
+                transform[12] = position.x;
+                transform[13] = position.y;
+                transform[14] = position.z;
+                
+                console.log('Started with original transform, updated position only');
+            } else {
+                // Fallback: create new transform
+                transform = Cesium.Transforms.eastNorthUpToFixedFrame(position);
+                console.log('Created new transform (no original available)');
+            }
+            
+            // Step 2: Apply ADDITIONAL rotation from controls (on top of original)
+            if (rotX !== 0 || rotY !== 0 || rotZ !== 0) {
+                const rotXRad = Cesium.Math.toRadians(rotX);
+                const rotYRad = Cesium.Math.toRadians(rotY);
+                const rotZRad = Cesium.Math.toRadians(rotZ);
+                
+                // Create rotation matrices
+                const rotXMatrix = Cesium.Matrix3.fromRotationX(rotXRad);
+                const rotYMatrix = Cesium.Matrix3.fromRotationY(rotYRad);
+                const rotZMatrix = Cesium.Matrix3.fromRotationZ(rotZRad);
+                
+                // Combine control rotations (Z * Y * X order)
+                let controlRotation = Cesium.Matrix3.multiply(rotZMatrix, rotYMatrix, new Cesium.Matrix3());
+                controlRotation = Cesium.Matrix3.multiply(controlRotation, rotXMatrix, controlRotation);
+                
+                // Apply control rotation on top of existing transform
+                const rotationMatrix4 = Cesium.Matrix4.fromRotationTranslation(controlRotation);
+                transform = Cesium.Matrix4.multiply(transform, rotationMatrix4, new Cesium.Matrix4());
+                
+                console.log('Applied ADDITIONAL rotation from controls (degrees):', { rotX, rotY, rotZ });
+            }
+            
+            // Step 3: Replace original scale with control scale
+            if (parsedTransform && parsedTransform.fullMatrix) {
+                // Remove original scale and apply control scale
+                const originalScale = parsedTransform.scale;
+                
+                // Extract the rotation-only matrix (remove scale)
+                const rotationMatrix = Cesium.Matrix4.getMatrix3(transform, new Cesium.Matrix3());
+                const normalizedRotation = new Cesium.Matrix3();
+                
+                // Normalize each column to remove scale
+                const col1 = new Cesium.Cartesian3(rotationMatrix[0], rotationMatrix[1], rotationMatrix[2]);
+                const col2 = new Cesium.Cartesian3(rotationMatrix[3], rotationMatrix[4], rotationMatrix[5]);
+                const col3 = new Cesium.Cartesian3(rotationMatrix[6], rotationMatrix[7], rotationMatrix[8]);
+                
+                Cesium.Cartesian3.normalize(col1, col1);
+                Cesium.Cartesian3.normalize(col2, col2);
+                Cesium.Cartesian3.normalize(col3, col3);
+                
+                // Rebuild normalized rotation matrix
+                normalizedRotation[0] = col1.x; normalizedRotation[1] = col1.y; normalizedRotation[2] = col1.z;
+                normalizedRotation[3] = col2.x; normalizedRotation[4] = col2.y; normalizedRotation[5] = col2.z;
+                normalizedRotation[6] = col3.x; normalizedRotation[7] = col3.y; normalizedRotation[8] = col3.z;
+                
+                // Apply control scale
+                const scaledRotation = Cesium.Matrix3.multiplyByScale(normalizedRotation, new Cesium.Cartesian3(scaleX, scaleY, scaleZ), new Cesium.Matrix3());
+                
+                // Rebuild transform with new scale
+                transform = Cesium.Matrix4.fromRotationTranslation(scaledRotation, position);
+                
+                console.log('Replaced original scale', originalScale, 'with control scale:', { scaleX, scaleY, scaleZ });
+            } else {
+                // Fallback: apply scale normally
+                const scaleMatrix = Cesium.Matrix4.fromScale(new Cesium.Cartesian3(scaleX, scaleY, scaleZ));
+                transform = Cesium.Matrix4.multiply(transform, scaleMatrix, new Cesium.Matrix4());
+                console.log('Applied scale from controls (fallback):', { scaleX, scaleY, scaleZ });
+            }
+            
+            console.log('Final transform with position + rotation + scale:', transform);
+            
+            // Apply the transform to root.transform
+            currentTileset.root.transform = transform;
+            console.log('Set tileset.root.transform with LIVE position + rotation + scale');
+            
+            // Verify the scale is actually in the transform matrix
+            const finalTransform = currentTileset.root.transform;
+            const col1 = new Cesium.Cartesian3(finalTransform[0], finalTransform[1], finalTransform[2]);
+            const col2 = new Cesium.Cartesian3(finalTransform[4], finalTransform[5], finalTransform[6]);
+            const col3 = new Cesium.Cartesian3(finalTransform[8], finalTransform[9], finalTransform[10]);
+            const actualScale = {
+                x: Cesium.Cartesian3.magnitude(col1),
+                y: Cesium.Cartesian3.magnitude(col2),
+                z: Cesium.Cartesian3.magnitude(col3)
+            };
+            console.log('✅ VERIFICATION - Final scale in transform matrix:', actualScale);
+            
+            // Update rotation sheet if it exists
+            updateRotationSheet();
+            
+            updateStatus(`🔄 LIVE Transform - Pos: (${posX}, ${posY}, ${posZ}) | Rot: (${rotX}°, ${rotY}°, ${rotZ}°) | Scale: (${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}, ${scaleZ.toFixed(2)})`);
+        }
+        
+        // Reset transform (position and rotation to zero, scale from tileset.json)
+        async function resetTransform() {
+            // Reset position to zero
+            document.getElementById('posX').value = 0;
+            document.getElementById('posY').value = 0;
+            document.getElementById('posZ').value = 0;
+            
+            // Reset rotation to 0 (treating tileset transform as baseline), restore scale from tileset.json
+            document.getElementById('rotX').value = 0;
+            document.getElementById('rotY').value = 0;
+            document.getElementById('rotZ').value = 0;
+            
+            const parsedTransform = await parseTransformFromTilesetJson();
+            if (parsedTransform) {
+                document.getElementById('scaleX').value = parsedTransform.scale.x;
+                document.getElementById('scaleY').value = parsedTransform.scale.y;
+                document.getElementById('scaleZ').value = parsedTransform.scale.z;
+            } else {
+                // Fallback if parsing fails - don't override any existing values
+                console.log('⚠️ resetTransform: tileset.json parsing failed, keeping current control values');
+            }
+            
+            initializeTransformControls();
+            if (currentTileset && baseTransform) {
+                await updateTransform();
+            }
+            updateStatus('Transform reset: position=0, rotation/scale from tileset.json');
+        }
+        
+        // Export current live transform matrix directly from tileset
+        function exportTransform() {
+            if (!currentTileset) {
+                updateStatus('❌ No tileset loaded');
+                return;
+            }
+            
+            // Export the current live transform matrix directly - no reconstruction needed!
+            const currentTransform = currentTileset.root.transform;
+            console.log('📤 EXPORT: Exporting current live transform matrix directly');
+            console.log('Current transform:', currentTransform);
+            
+            // Convert to array
+            const matrixArray = [];
+            for (let i = 0; i < 16; i++) {
+                matrixArray.push(currentTransform[i]);
+            }
+            
+            // Extract position for geographic coordinates
+            const translation = Cesium.Matrix4.getTranslation(currentTransform, new Cesium.Cartesian3());
+            
+            // Check for invalid translation values
+            if (!isFinite(translation.x) || !isFinite(translation.y) || !isFinite(translation.z)) {
+                updateStatus('❌ Export failed: Invalid transform matrix values');
+                console.error('Invalid translation values:', translation);
+                return;
+            }
+            
+            let cartographic = null;
+            try {
+                cartographic = Cesium.Cartographic.fromCartesian(translation);
+            } catch (error) {
+                updateStatus('❌ Export failed: Could not convert position to geographic coordinates');
+                console.error('Cartographic conversion error:', error);
+                return;
+            }
+            
+            // Get current control values for reference
+            const controlValues = {
+                position: {
+                    x: parseFloat(document.getElementById('posX').value),
+                    y: parseFloat(document.getElementById('posY').value),
+                    z: parseFloat(document.getElementById('posZ').value)
+                },
+                rotation: {
+                    x: parseFloat(document.getElementById('rotX').value),
+                    y: parseFloat(document.getElementById('rotY').value),
+                    z: parseFloat(document.getElementById('rotZ').value)
+                },
+                scale: {
+                    x: parseFloat(document.getElementById('scaleX').value),
+                    y: parseFloat(document.getElementById('scaleY').value),
+                    z: parseFloat(document.getElementById('scaleZ').value)
+                }
+            };
+            
+            const exportData = {
+                timestamp: new Date().toISOString(),
+                description: "Current live SPZ transform matrix - exactly what you see in the viewer",
+                transformMatrix: matrixArray,
+                matrixComponents: {
+                    position: {
+                        cartesian: {
+                            x: translation.x,
+                            y: translation.y,  
+                            z: translation.z
+                        },
+                        geographic: cartographic ? {
+                            longitude: Cesium.Math.toDegrees(cartographic.longitude),
+                            latitude: Cesium.Math.toDegrees(cartographic.latitude),
+                            height: cartographic.height
+                        } : null
+                    }
+                },
+                transformControlValues: controlValues,
+                cesiumMatrix4Format: {
+                    note: "This is a Cesium.Matrix4 in column-major order, exported directly from the live tileset",
+                    usage: "Can be used with Cesium.Matrix4.fromArray(transformMatrix)",
+                    codeExample: `
+// To apply this transform to a tileset:
+const transform = Cesium.Matrix4.fromArray(${JSON.stringify(matrixArray)});
+tileset.root.transform = transform;`
+                },
+                note: "✅ This is the exact transform matrix currently applied to the SPZ - what you see is what you get!"
+            };
+            
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `spz-transform-${Date.now()}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            updateStatus('✅ Current transform matrix exported - exact match to what you see!');
+            
+            // Log key values to console for immediate access
+            console.log('📤 EXPORTED LIVE TRANSFORM MATRIX:');
+            console.log('Matrix Array (column-major):', matrixArray);
+            console.log('Geographic Position:', cartographic ? {
+                longitude: Cesium.Math.toDegrees(cartographic.longitude),
+                latitude: Cesium.Math.toDegrees(cartographic.latitude), 
+                height: cartographic.height
+            } : 'Could not extract position');
+            console.log('Control Values:', controlValues);
+            console.log('Code to apply this transform:');
+            console.log(`const transform = Cesium.Matrix4.fromArray([${matrixArray.join(', ')}]);`);
+            console.log('tileset.root.transform = transform;');
+        }
+        
+        
+        // Parse transform values from tileset.json file
+        async function parseTransformFromTilesetJson() {
+            try {
+                const response = await fetch('./tileset.json');
+                const tilesetData = await response.json();
+                const transform = tilesetData.root.transform;
+                
+                if (!transform || transform.length !== 16) {
+                    console.warn('No valid transform found in tileset.json');
+                    return null;
+                }
+                
+                // Extract scale from column vector magnitudes (proper method)
+                const scaleX = Math.sqrt(transform[0]*transform[0] + transform[1]*transform[1] + transform[2]*transform[2]);
+                const scaleY = Math.sqrt(transform[4]*transform[4] + transform[5]*transform[5] + transform[6]*transform[6]); 
+                const scaleZ = Math.sqrt(transform[8]*transform[8] + transform[9]*transform[9] + transform[10]*transform[10]);
+                
+                // Extract translation
+                const translation = {
+                    x: transform[12],
+                    y: transform[13], 
+                    z: transform[14]
+                };
+                
+                // Extract rotation matrix (first 3x3, normalized by scale)
+                const rotMatrix = [
+                    [transform[0]/scaleX, transform[4]/scaleY, transform[8]/scaleZ],
+                    [transform[1]/scaleX, transform[5]/scaleY, transform[9]/scaleZ],
+                    [transform[2]/scaleX, transform[6]/scaleY, transform[10]/scaleZ]
+                ];
+                
+                // Convert rotation matrix to Euler angles (Z-Y-X order to match export function)
+                // This must match the export function's rotation order: Z, Y, X
+                
+                // For Z-Y-X Euler angle extraction (matching export function)
+                const sy = Math.sqrt(rotMatrix[0][0] * rotMatrix[0][0] + rotMatrix[1][0] * rotMatrix[1][0]);
+                const singular = sy < 1e-6; // Check for gimbal lock
+                
+                let rotationX, rotationY, rotationZ;
+                
+                if (!singular) {
+                    rotationX = Math.atan2(rotMatrix[2][1], rotMatrix[2][2]) * 180 / Math.PI;
+                    rotationY = Math.atan2(-rotMatrix[2][0], sy) * 180 / Math.PI;
+                    rotationZ = Math.atan2(rotMatrix[1][0], rotMatrix[0][0]) * 180 / Math.PI;
+                } else {
+                    rotationX = Math.atan2(-rotMatrix[1][2], rotMatrix[1][1]) * 180 / Math.PI;
+                    rotationY = Math.atan2(-rotMatrix[2][0], sy) * 180 / Math.PI;
+                    rotationZ = 0;
+                }
+                
+                const rotation = {
+                    x: rotationX, // Pitch (rotation around X-axis)
+                    y: rotationY, // Yaw (rotation around Y-axis)
+                    z: rotationZ  // Roll (rotation around Z-axis)
+                };
+                
+                console.log('🔄 Extracted rotation from matrix (may differ from original due to matrix conversion):', rotation);
+                console.warn('⚠️ ROTATION ACCURACY: Matrix-to-Euler conversion can produce different angles that represent the same rotation. This is mathematically normal.');
+                console.log('💡 TIP: If you exported this matrix from this tool, use the "transformControlValues" from the JSON instead of these extracted values.');
+                
+                console.log('📄 Parsed from tileset.json:', {
+                    scale: { x: scaleX, y: scaleY, z: scaleZ },
+                    rotation: rotation,
+                    translation: translation,
+                    rawTransform: transform
+                });
+                
+                return {
+                    scale: { x: scaleX, y: scaleY, z: scaleZ },
+                    rotation: rotation,
+                    translation: translation,
+                    rawTransform: transform,
+                    fullMatrix: transform  // Add full matrix for direct use
+                };
+                
+            } catch (error) {
+                console.error('Error parsing tileset.json:', error);
+                return null;
+            }
+        }
+
+        // Helper function to set up transform controls for a tileset
+        async function setupTransformControls(tileset, baseLocation) {
+            console.log('🔧 setupTransformControls called with:', { tileset, baseLocation });
+            
+            currentTileset = tileset;
+            console.log('🔖 Set currentTileset to:', currentTileset);
+            
+            // Set the reference position for 0,0,0 controls (current splat location)
+            const currentTransform = tileset.root.transform;
+            const currentPosition = Cesium.Matrix4.getTranslation(currentTransform, new Cesium.Cartesian3());
+            referencePosition = currentPosition.clone();
+            console.log('🔖 Set referencePosition (0,0,0 point) to current splat location:', referencePosition);
+            
+            if (baseLocation) {
+                baseTransform = Cesium.Transforms.eastNorthUpToFixedFrame(baseLocation);
+                console.log('🔖 Set baseTransform from baseLocation:', baseTransform);
+            } else {
+                baseTransform = currentTransform.clone();
+                console.log('🔖 Set baseTransform to current transform');
+            }
+            
+            // Parse scale values from tileset.json, set rotation to 0,0,0 (baseline)
+            const parsedTransform = await parseTransformFromTilesetJson();
+            if (parsedTransform) {
+                // Set rotation controls to 0,0,0 (treating tileset transform as baseline)
+                document.getElementById('rotX').value = 0;
+                document.getElementById('rotY').value = 0;
+                document.getElementById('rotZ').value = 0;
+                document.getElementById('scaleX').value = parsedTransform.scale.x;
+                document.getElementById('scaleY').value = parsedTransform.scale.y;
+                document.getElementById('scaleZ').value = parsedTransform.scale.z;
+                
+                // Update number inputs to match (rotation = 0,0,0)
+                document.getElementById('rotXVal').value = 0;
+                document.getElementById('rotYVal').value = 0;
+                document.getElementById('rotZVal').value = 0;
+                document.getElementById('scaleXVal').value = parsedTransform.scale.x;
+                document.getElementById('scaleYVal').value = parsedTransform.scale.y;
+                document.getElementById('scaleZVal').value = parsedTransform.scale.z;
+                
+                console.log('🎮 Set rotation/scale controls from tileset.json:', {
+                    rotation: parsedTransform.rotation,
+                    scale: parsedTransform.scale
+                });
+                console.log('🎮 ROTATION VALUES APPLIED TO CONTROLS:', {
+                    rotX: document.getElementById('rotX').value,
+                    rotY: document.getElementById('rotY').value,
+                    rotZ: document.getElementById('rotZ').value
+                });
+                console.log('🎮 SCALE VALUES APPLIED TO CONTROLS:', {
+                    scaleX: document.getElementById('scaleX').value,
+                    scaleY: document.getElementById('scaleY').value,
+                    scaleZ: document.getElementById('scaleZ').value
+                });
+            }
+            
+            // Extract current position values from the tileset (this will set position controls)
+            syncControlsToTileset();
+            updateStatus('🎮 Transform controls ready! Position, rotation, and scale all affect tileset in REAL-TIME!');
+            
+            // Verify the assignment worked
+            console.log('✅ setupTransformControls complete. currentTileset is now:', currentTileset);
+        }
+        
+        // Sync controls to current tileset transform
+        function syncControlsToTileset() {
+            console.log('🔄 syncControlsToTileset() called');
+            
+          if (!currentTileset || !currentTileset.root.transform) {
+            console.log('No tileset or root.transform, resetting to defaults');
+                resetTransform();
+                return;
+            }
+            
+          console.log('Current tileset root.transform:', currentTileset.root.transform);
+            
+            // Extract translation from the current transform
+            const currentMatrix = currentTileset.root.transform;
+            const translation = Cesium.Matrix4.getTranslation(currentMatrix, new Cesium.Cartesian3());
+            console.log('Extracted translation:', translation);
+            
+            // Convert to geodetic to get meaningful position values
+            const cartographic = Cesium.Cartographic.fromCartesian(translation);
+            console.log('Cartographic position:', cartographic);
+            
+            if (cartographic) {
+                const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+                const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+                const height = cartographic.height;
+                
+                console.log('Position - Longitude:', longitude, 'Latitude:', latitude, 'Height:', height);
+                
+                // Set position controls to 0,0,0 (representing the reference position)
+                document.getElementById('posX').value = 0; // 0 = at reference position
+                document.getElementById('posY').value = 0;
+                document.getElementById('posZ').value = 0;
+                console.log('📍 Position controls set to 0,0,0 (reference position)');
+                
+                // Update ranges for position sliders to be more appropriate
+                document.getElementById('posX').min = -1000;
+                document.getElementById('posX').max = 1000;
+                document.getElementById('posY').min = -1000;
+                document.getElementById('posY').max = 1000;
+                
+                updateStatus(`📍 Synced to current position: ${longitude.toFixed(6)}, ${latitude.toFixed(6)}, ${height.toFixed(1)}m`);
+            } else {
+                console.log('Could not extract cartographic position, using defaults');
+                resetTransform();
+            }
+            
+            // DON'T reset rotation and scale here - they should keep values from parseTransformFromTilesetJson
+            // Reset rotation to 0 (treating tileset transform as baseline/zero)
+            document.getElementById('rotX').value = 0;
+            document.getElementById('rotY').value = 0;
+            document.getElementById('rotZ').value = 0;
+            // DO NOT reset scale - keep the values from tileset.json parsing
+            console.log('🔄 syncControlsToTileset: Reset rotation to 0,0,0 (tileset transform = baseline)');
+            
+            // Update number inputs
+            initializeTransformControls();
+        }
+
+        function updateStatus(message) {
+            const status = document.getElementById('status');
+            const timestamp = new Date().toLocaleTimeString();
+            if (status) {
+                status.innerHTML = `[${timestamp}] ${message}<br>` + status.innerHTML;
+            }
+            console.log('Status:', message);
+        }
+
+        function disableAllButtons() {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+
+        function enableAllButtons() {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = false);
+        }
+
+        // Load working Cesium tower reference
+        window.loadTowerReference = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading Cesium tower reference...');
+                
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('Specs/Data/Cesium3DTiles/GaussianSplats/tower/tileset.json');
+                viewer.scene.primitives.add(tileset);
+                
+                console.log('Tower tileset:', tileset);
+                console.log('Memory usage KB:', tileset.totalMemoryUsageInBytes / 1024);
+                console.log('Content type:', tileset.root.content?.constructor.name);
+                
+                await viewer.zoomTo(tileset);
+                updateStatus('✅ Tower reference loaded successfully!');
+                
+            } catch (error) {
+                updateStatus(`❌ Tower reference error: ${error.message}`);
+                console.error('Tower reference error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+
+
+
+        window.clearScene = function() {
+            viewer.scene.primitives.removeAll();
+            viewer.dataSources.removeAll();
+            currentTileset = null;
+            baseTransform = null;
+            referencePosition = null; // Reset the fixed reference position
+            rotationSheet = null; // Reset rotation sheet reference
+            updateStatus('Scene cleared');
+        };
+
+        // Toggle GeoJSON visibility
+        window.toggleGeoJSONVisibility = function() {
+            let geoJsonCount = 0;
+            let visibleCount = 0;
+            
+            for (let i = 0; i < viewer.dataSources.length; i++) {
+                const dataSource = viewer.dataSources.get(i);
+                
+                if (dataSource.name && dataSource.name.includes('geojson')) {
+                    geoJsonCount++;
+                    dataSource.show = !dataSource.show;
+                    if (dataSource.show) visibleCount++;
+                } else if (dataSource.entities && dataSource.entities.values.length > 0) {
+                    // Check if it contains polygon/polyline entities (likely GeoJSON)
+                    const hasGeometry = dataSource.entities.values.some(entity => 
+                        entity.polygon || entity.polyline || entity.point
+                    );
+                    if (hasGeometry) {
+                        geoJsonCount++;
+                        dataSource.show = !dataSource.show;
+                        if (dataSource.show) visibleCount++;
+                    }
+                }
+            }
+            
+            if (geoJsonCount === 0) {
+                updateStatus('👁️ No GeoJSON data sources found');
+            } else {
+                const status = visibleCount > 0 ? 'visible' : 'hidden';
+                updateStatus(`👁️ GeoJSON ${status} (${geoJsonCount} data source${geoJsonCount > 1 ? 's' : ''})`);
+            }
+        };
+
+        // Toggle rotation visualization sheet
+        window.toggleRotationSheet = function() {
+            if (rotationSheet) {
+                // Hide existing sheet and local rotation controls
+                viewer.dataSources.remove(rotationSheet);
+                rotationSheet = null;
+                
+                if (localRotationControls) {
+                    viewer.dataSources.remove(localRotationControls);
+                    localRotationControls = null;
+                }
+                
+                // Reset local rotation tracking
+                currentLocalRotation = { x: 0, y: 0, z: 0 };
+                
+                updateStatus('📐 Rotation sheet and local controls hidden');
+            } else {
+                // Create new sheet
+                createRotationSheet();
+            }
+        };
+
+        // Create rotation visualization sheet
+        function createRotationSheet() {
+            if (!currentTileset) {
+                updateStatus('❌ No tileset loaded - cannot create rotation sheet');
+                return;
+            }
+
+            // Create a data source for the rotation sheet (like GeoJSON approach)
+            const rotationDataSource = new Cesium.CustomDataSource('rotationSheet');
+                
+                // Setup transform controls with Palo Alto as base
+                const paloAltoLocation = Cesium.Cartesian3.fromDegrees(-122.143, 37.4419, 10);
+                setupTransformControls(tileset, paloAltoLocation);
+                
+                // Log detailed info based on analysis
+                console.log('Analysis-based positioning results:', {
+                    contentType: content?.constructor.name,
+                    isGaussianSplat: isGaussianSplat,
+                    memoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    finalBounds: tileset.boundingSphere,
+                    originalTransform: tileset.root.transform,
+                    analysisRecommendation: 'Palo Alto residential area positioning'
+                });
+        };
+
+        // Experimental: Match SPZ rotation and scale to GeoJSON features
+        window.loadObsoleteFunctionMatchedToGeoJSON = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('🎯 Experimental: Matching SPZ rotation and scale to GeoJSON...');
+                
+                // Load the runtime tileset (no embedded transforms)
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
+                    debugTreatTilesetAsGaussianSplats: true
+                });
+                viewer.scene.primitives.add(tileset);
+                
+                // Wait for tileset to be ready
+                await tileset.readyPromise;
+                
+                console.log('Applying experimental GeoJSON matching...');
+                
+                // Position at precise GeoJSON center (calculated from orientation analysis)
+                const centerLocation = Cesium.Cartesian3.fromDegrees(
+                    -81.65703541, 
+                    28.52171833, 
+                    6.08
+                );
+                
+                // Create transform with rotation to match building orientation
+                let transform = Cesium.Transforms.eastNorthUpToFixedFrame(centerLocation);
+                
+                // Apply rotation to match dominant building orientation (-153.8° from analysis)
+                // This should align SPZ with the main building axes
+                const rotationAngle = Cesium.Math.toRadians(-153.8);
+                const rotationMatrix = Cesium.Matrix3.fromRotationZ(rotationAngle);
+                const rotation4x4 = Cesium.Matrix4.fromRotationTranslation(rotationMatrix);
+                transform = Cesium.Matrix4.multiply(transform, rotation4x4, new Cesium.Matrix4());
+                
+                updateStatus('Applied -153.8° rotation to match building orientation...');
+                
+                // Apply scale to roughly match GeoJSON dimensions
+                // GeoJSON building dimensions: 145.4m × 147.8m (large property)
+                const recommendedScale = 2.931; // Based on 146.6m avg dimension
+                
+                // Check original SPZ size and adjust accordingly
+                const boundingSphere = tileset.boundingSphere;
+                let finalScale = recommendedScale;
+                
+                console.log('Original SPZ bounding sphere:', boundingSphere);
+                
+                if (boundingSphere.radius < 1.0) {
+                    // Very small SPZ - scale up significantly to match ~147m property
+                    finalScale = Math.max(14.7, recommendedScale);
+                    updateStatus(`SPZ very small (${boundingSphere.radius.toFixed(3)}m) - scaling up to ${finalScale.toFixed(1)}x`);
+                } else if (boundingSphere.radius > 100.0) {
+                    // Very large SPZ - scale down
+                    finalScale = Math.min(0.1, recommendedScale);
+                    updateStatus(`SPZ very large (${boundingSphere.radius.toFixed(1)}m) - scaling down to ${finalScale.toFixed(3)}x`);
+                } else {
+                    updateStatus(`Applying calculated scale: ${finalScale.toFixed(3)}x for ~147m property match`);
+                }
+                
+                // Apply final transform
+                transform = Cesium.Matrix4.multiplyByUniformScale(transform, finalScale, transform);
+                tileset.root.transform = transform;
+                
+                console.log('SPZ matching applied:', {
+                    rotation: -153.8,
+                    scale: finalScale,
+                    buildingSize: '145.4m × 147.8m',
+                    originalRadius: boundingSphere.radius
+                });
+                
+                // Position camera for optimal viewing of the matched result
+                await viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(
+                    0,                               // heading (north)
+                    Cesium.Math.toRadians(-45),      // pitch (look down at 45°)
+                    Math.max(147.8, 150)             // distance based on building size
+                ));
+                
+                // Verify content type
+                const content = tileset.root.content;
+                const isGaussianSplat = content instanceof Cesium.GaussianSplat3DTileContent;
+                
+                updateStatus(`✅ Experimental matching complete! Rotation: -153.8°, Scale: ${finalScale.toFixed(2)}x, GaussianSplat: ${isGaussianSplat}`);
+                
+                // Detailed logging for analysis
+                console.log('Experimental matching results:', {
+                    contentType: content?.constructor.name,
+                    isGaussianSplat: isGaussianSplat,
+                    memoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    appliedRotation: '-153.8° (dominant building orientation)',
+                    appliedScale: finalScale,
+                    targetDimensions: '145.4m × 147.8m (GeoJSON property size)',
+                    finalBounds: tileset.boundingSphere
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ Experimental matching error: ${error.message}`);
+                console.error('Experimental matching error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        // Position SPZ at the center of the GeoJSON features
+        window.loadObsoleteFunctionAtGeoJSONCenter = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading SPZ at GeoJSON center...');
+                
+                // Load the runtime tileset (no embedded transforms)
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
+                    debugTreatTilesetAsGaussianSplats: true
+                });
+                viewer.scene.primitives.add(tileset);
+                
+                // Wait for tileset to be ready
+                await tileset.readyPromise;
+                
+                console.log('Positioning SPZ at GeoJSON center...');
+                
+                // GeoJSON center coordinates (calculated from reference.geojson)
+                // Center: -81.65699333, 28.52165138, 6.08m (Florida)
+                const centerLocation = Cesium.Cartesian3.fromDegrees(
+                    -81.65699333, 
+                    28.52165138, 
+                    6.08
+                );
+                
+                tileset.root.transform = Cesium.Transforms.eastNorthUpToFixedFrame(centerLocation);
+                
+                updateStatus('Positioned SPZ at Reference center coordinates (Florida)');
+                
+                // Check if scaling is needed
+                const boundingSphere = tileset.boundingSphere;
+                console.log('SPZ bounding sphere at GeoJSON center:', boundingSphere);
+                
+                if (boundingSphere.radius < 1.0) {
+                    const scale = Math.max(10.0, 1.0 / boundingSphere.radius);
+                    tileset.root.transform = Cesium.Matrix4.multiplyByUniformScale(
+                      tileset.root.transform, scale, tileset.root.transform
+                    );
+                    updateStatus(`Applied scaling factor: ${scale.toFixed(1)}x for visibility`);
+                    console.log('Applied scaling factor:', scale);
+                }
+                
+                // Position camera for optimal viewing
+                await viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(
+                    0,                               // heading (north)
+                    Cesium.Math.toRadians(-30),      // pitch (look down 30 degrees)
+                    Math.max(boundingSphere.radius * 3, 100)  // distance (minimum 100m)
+                ));
+                
+                // Verify content type
+                const content = tileset.root.content;
+                const isGaussianSplat = content instanceof Cesium.GaussianSplat3DTileContent;
+                
+                updateStatus(`✅ SPZ positioned at GeoJSON center! Content: ${content?.constructor.name}, GaussianSplat: ${isGaussianSplat}`);
+                
+                // Setup transform controls with GeoJSON center as base
+                setupTransformControls(tileset, centerLocation);
+                
+                console.log('GeoJSON center positioning results:', {
+                    centerCoordinates: 'Reference, Florida (-81.657, 28.522)',
+                    contentType: content?.constructor.name,
+                    isGaussianSplat: isGaussianSplat,
+                    memoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    finalBounds: tileset.boundingSphere
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ GeoJSON center positioning error: ${error.message}`);
+                console.error('GeoJSON center positioning error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        // Load the GeoJSON for reference/comparison
+        window.loadGeoJSONReference = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading Reference GeoJSON for reference...');
+                
+                // Load the GeoJSON file
+                const geoJsonDataSource = await Cesium.GeoJsonDataSource.load('./reference.geojson', {
+                    clampToGround: true,
+                    stroke: Cesium.Color.YELLOW,
+                    strokeWidth: 3,
+                    fill: Cesium.Color.YELLOW.withAlpha(0.3)
+                });
+                
+                viewer.dataSources.add(geoJsonDataSource);
+                
+                // Zoom to the GeoJSON data
+                await viewer.zoomTo(geoJsonDataSource);
+                
+                updateStatus('✅ Reference GeoJSON loaded! This shows the structure boundaries.');
+                
+                console.log('GeoJSON loaded:', {
+                    entities: geoJsonDataSource.entities.values.length,
+                    name: geoJsonDataSource.name
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ Error loading GeoJSON: ${error.message}`);
+                console.error('GeoJSON loading error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+
+
+        // Load matched SPZ with GeoJSON for direct comparison
+        window.loadMatchedSPZWithGeoJSON = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('🎯 Loading matched SPZ with GeoJSON for comparison...');
+                
+                // First load the GeoJSON with distinctive styling
+                const geoJsonDataSource = await Cesium.GeoJsonDataSource.load('./reference.geojson', {
+                    clampToGround: true,
+                    stroke: Cesium.Color.RED,
+                    strokeWidth: 3,
+                    fill: Cesium.Color.RED.withAlpha(0.15),
+                    extrudedHeight: 2.0  // Slight extrusion to make it more visible
+                });
+                viewer.dataSources.add(geoJsonDataSource);
+                updateStatus('GeoJSON loaded with red outline, now loading matched SPZ...');
+                
+                // Then load the SPZ with experimental matching
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
+                    debugTreatTilesetAsGaussianSplats: true
+                });
+                viewer.scene.primitives.add(tileset);
+                await tileset.readyPromise;
+                
+                // Apply the same experimental matching as the dedicated function
+                const centerLocation = Cesium.Cartesian3.fromDegrees(
+                    -81.65703541, 
+                    28.52171833, 
+                    6.08
+                );
+                
+                let transform = Cesium.Transforms.eastNorthUpToFixedFrame(centerLocation);
+                
+                // Apply rotation to match building orientation
+                const rotationAngle = Cesium.Math.toRadians(-153.8);
+                const rotationMatrix = Cesium.Matrix3.fromRotationZ(rotationAngle);
+                const rotation4x4 = Cesium.Matrix4.fromRotationTranslation(rotationMatrix);
+                transform = Cesium.Matrix4.multiply(transform, rotation4x4, new Cesium.Matrix4());
+                
+                // Apply scale matching
+                const recommendedScale = 2.931;
+                const boundingSphere = tileset.boundingSphere;
+                let finalScale = recommendedScale;
+                
+                if (boundingSphere.radius < 1.0) {
+                    finalScale = Math.max(14.7, recommendedScale);
+                } else if (boundingSphere.radius > 100.0) {
+                    finalScale = Math.min(0.1, recommendedScale);
+                }
+                
+                transform = Cesium.Matrix4.multiplyByUniformScale(transform, finalScale, transform);
+                tileset.root.transform = transform;
+                
+                updateStatus(`Applied matching: -153.8° rotation, ${finalScale.toFixed(2)}x scale`);
+                
+                // Zoom to show both overlaid
+                await viewer.zoomTo(geoJsonDataSource, new Cesium.HeadingPitchRange(
+                    0,
+                    Cesium.Math.toRadians(-45),
+                    200  // Good distance to see both SPZ and GeoJSON
+                ));
+                
+                // Verify and report
+                const content = tileset.root.content;
+                const isGaussianSplat = content instanceof Cesium.GaussianSplat3DTileContent;
+                
+                updateStatus(`✅ Comparison ready! Red outlines = GeoJSON boundaries, SPZ = 3D Gaussian splats`);
+                updateStatus(`SPZ: ${isGaussianSplat ? 'Gaussian Splat' : 'Other'}, GeoJSON: ${geoJsonDataSource.entities.values.length} features`);
+                
+                console.log('Matched comparison results:', {
+                    spzContentType: content?.constructor.name,
+                    spzIsGaussianSplat: isGaussianSplat,
+                    spzMemoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    geojsonFeatures: geoJsonDataSource.entities.values.length,
+                    appliedRotation: '-153.8°',
+                    appliedScale: finalScale,
+                    notes: 'Red outlines show GeoJSON boundaries, SPZ should align with building orientation'
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ Error loading matched comparison: ${error.message}`);
+                console.error('Matched comparison error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        // Intelligent positioning based on content analysis
+        window.loadObsoleteFunctionIntelligent = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading SPZ with intelligent positioning...');
+                
+                // Load the runtime tileset (no embedded transforms)
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
+                    debugTreatTilesetAsGaussianSplats: true
+                });
+                viewer.scene.primitives.add(tileset);
+                
+                // Wait for tileset to be ready
+                await tileset.readyPromise;
+                
+                console.log('Analyzing SPZ content...');
+                const boundingSphere = tileset.boundingSphere;
+                console.log('Bounding sphere:', {
+                    center: boundingSphere.center,
+                    radius: boundingSphere.radius
+                });
+                
+                // Analyze the bounding sphere to determine appropriate positioning
+                const center = boundingSphere.center;
+                const radius = boundingSphere.radius;
+                
+                // Check if it's near origin (local coordinates)
+                const isNearOrigin = Math.abs(center.x) < 1000 && 
+                                     Math.abs(center.y) < 1000 && 
+                                     Math.abs(center.z) < 1000;
+                
+                // Check if it's very small (needs scaling)
+                const isVerySmall = radius < 1.0;
+                
+                // Check if it's underground (negative Z in world coords)
+                const isUnderground = center.z < -1000;
+                
+                updateStatus(`Analysis: NearOrigin=${isNearOrigin}, VerySmall=${isVerySmall}, Underground=${isUnderground}, Radius=${radius.toFixed(2)}`);
+                
+                if (isNearOrigin || isUnderground) {
+                    updateStatus('Model detected near origin - use transform controls for geographic positioning');
+                    
+                    let recommendedScale = 1.0;
+                    if (isVerySmall) {
+                        recommendedScale = Math.max(10.0, 1.0 / radius);
+                        updateStatus(`Model is very small (radius: ${radius.toFixed(4)}), consider ${recommendedScale.toFixed(1)}x scale`);
+                    }
+                    
+                    // Suggest positioning but don't auto-apply
+                    const suggestedLocation = Cesium.Cartesian3.fromDegrees(-122.1430, 37.4419, 10);
+                    console.log('Positioning suggestions:', {
+                        location: 'Palo Alto, CA (good for residential content)',
+                        coordinates: suggestedLocation,
+                        recommendedScale: recommendedScale,
+                        note: 'Use transform controls to apply these suggestions'
+                    });
+                    
+                    updateStatus(`Suggestions available - use transform controls to position at geographic location`);
+                    
+                } else {
+                    updateStatus('Model appears to have world coordinates - may already be positioned correctly');
+                }
+                
+                // Position camera for optimal viewing
+                const viewingRange = Math.max(boundingSphere.radius * 2, 50);
+                await viewer.zoomTo(tileset, new Cesium.HeadingPitchRange(
+                    0,                               // heading (north)
+                    Cesium.Math.toRadians(-30),      // pitch (look down 30 degrees)
+                    viewingRange                     // distance
+                ));
+                
+                // Verify content type
+                const content = tileset.root.content;
+                const isGaussianSplat = content instanceof Cesium.GaussianSplat3DTileContent;
+                
+                updateStatus(`✅ Intelligent analysis complete! Content: ${content?.constructor.name}, GaussianSplat: ${isGaussianSplat}`);
+                
+                // Log detailed analysis info
+                console.log('Analysis results:', {
+                    contentType: content?.constructor.name,
+                    isGaussianSplat: isGaussianSplat,
+                    memoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    originalBounds: tileset.boundingSphere,
+                    originalTransform: tileset.root.transform,
+                    manualControlsEnabled: true
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ Intelligent positioning error: ${error.message}`);
+                console.error('Intelligent positioning error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        // Load original SPZ without any transforms
+        window.loadObsoleteFunctionOriginal = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading original SPZ (no transforms)...');
+                
+                // Load the original tileset.json without any transforms
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json');
+                viewer.scene.primitives.add(tileset);
+                
+                console.log('SPZ Original tileset:', tileset);
+                console.log('Memory usage KB:', tileset.totalMemoryUsageInBytes / 1024);
+                console.log('Content type:', tileset.root.content?.constructor.name);
+                
+                // Check where the bounding sphere is positioned
+                const boundingSphere = tileset.boundingSphere;
+                updateStatus(`Bounding sphere center: [${boundingSphere.center.x.toFixed(3)}, ${boundingSphere.center.y.toFixed(3)}, ${boundingSphere.center.z.toFixed(3)}]`);
+                
+                await viewer.zoomTo(tileset);
+                updateStatus('✅ Original loaded - check positioning!');
+                
+            } catch (error) {
+                updateStatus(`❌ Original loading error: ${error.message}`);
+                console.error('Original loading error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        window.clearScene = function() {
+            viewer.scene.primitives.removeAll();
+            viewer.dataSources.removeAll();
+            currentTileset = null;
+            baseTransform = null;
+            referencePosition = null; // Reset the fixed reference position
+            rotationSheet = null; // Reset rotation sheet reference
+            updateStatus('Scene cleared');
+        };
+
+        // Toggle GeoJSON visibility
+        window.toggleGeoJSONVisibility = function() {
+            let geoJsonCount = 0;
+            let visibleCount = 0;
+            
+            for (let i = 0; i < viewer.dataSources.length; i++) {
+                const dataSource = viewer.dataSources.get(i);
+                
+                if (dataSource.name && dataSource.name.includes('geojson')) {
+                    geoJsonCount++;
+                    dataSource.show = !dataSource.show;
+                    if (dataSource.show) visibleCount++;
+                } else if (dataSource.entities && dataSource.entities.values.length > 0) {
+                    // Check if it contains polygon/polyline entities (likely GeoJSON)
+                    const hasGeometry = dataSource.entities.values.some(entity => 
+                        entity.polygon || entity.polyline || entity.point
+                    );
+                    if (hasGeometry) {
+                        geoJsonCount++;
+                        dataSource.show = !dataSource.show;
+                        if (dataSource.show) visibleCount++;
+                    }
+                }
+            }
+            
+            if (geoJsonCount === 0) {
+                updateStatus('👁️ No GeoJSON data sources found');
+            } else {
+                const status = visibleCount > 0 ? 'visible' : 'hidden';
+                updateStatus(`👁️ GeoJSON ${status} (${geoJsonCount} data source${geoJsonCount > 1 ? 's' : ''})`);
+            }
+        };
+
+        // Toggle rotation visualization sheet
+        window.toggleRotationSheet = function() {
+            if (rotationSheet) {
+                // Hide existing sheet and local rotation controls
+                viewer.dataSources.remove(rotationSheet);
+                rotationSheet = null;
+                
+                if (localRotationControls) {
+                    viewer.dataSources.remove(localRotationControls);
+                    localRotationControls = null;
+                }
+                
+                // Reset local rotation tracking
+                currentLocalRotation = { x: 0, y: 0, z: 0 };
+                
+                updateStatus('📐 Rotation sheet and local controls hidden');
+            } else {
+                // Create new sheet
+                createRotationSheet();
+            }
+        };
+
+        // Create rotation visualization sheet
+        function createRotationSheet() {
+            if (!currentTileset) {
+                updateStatus('❌ No tileset loaded - cannot create rotation sheet');
+                return;
+            }
+
+            // Create a data source for the rotation sheet (like GeoJSON approach)
+            const rotationDataSource = new Cesium.CustomDataSource('rotationSheet');
+            
+            // Create a box entity at the GeoJSON center location that supports full 3D rotation
+            const boxEntity = new Cesium.Entity({
+                name: 'Rotation Visualization Sheet',
+                position: Cesium.Cartesian3.fromDegrees(-81.65699333, 28.52165138, 22.5), // Center at 22.5m height
+                box: {
+                    dimensions: new Cesium.Cartesian3(200.0, 200.0, 5.0), // 200m x 200m x 5m box
+                    material: Cesium.Color.CYAN.withAlpha(0.8),
+                    outline: true,
+                    outlineColor: Cesium.Color.WHITE
+                },
+                orientation: Cesium.Quaternion.IDENTITY // Will be updated with rotations
+            });
+            
+            rotationDataSource.entities.add(boxEntity);
+            viewer.dataSources.add(rotationDataSource);
+            
+            // Store reference to the data source
+            rotationSheet = rotationDataSource;
+            
+            // Create local rotation control axes
+            createLocalRotationControls();
+            
+            // Update rotation immediately
+            updateRotationSheet();
+            
+            updateStatus('📐 Rotation sheet created! Use rotation controls or click-drag the colored axes for local rotation.');
+            console.log('📐 Rotation sheet created as entity at GeoJSON center');
+        }
+
+        // Create local rotation control axes (X=Red, Y=Green, Z=Blue)
+        function createLocalRotationControls() {
+            if (localRotationControls) {
+                viewer.dataSources.remove(localRotationControls);
+            }
+            
+            const axesDataSource = new Cesium.CustomDataSource('localRotationControls');
+            const center = Cesium.Cartesian3.fromDegrees(-81.65699333, 28.52165138, 25.0);
+            
+            // X-axis (Red) - extends in local X direction
+            const xAxis = new Cesium.Entity({
+                name: 'X-Axis Rotation Control',
+                position: center,
+                cylinder: {
+                    length: 150.0,
+                    topRadius: 5.0,
+                    bottomRadius: 5.0,
+                    material: Cesium.Color.RED,
+                    outline: true,
+                    outlineColor: Cesium.Color.DARKRED
+                },
+                orientation: Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_Z, Cesium.Math.PI_OVER_TWO), // Rotate to align with X
+                userData: { axis: 'x' }
+            });
+            
+            // Y-axis (Green) - extends in local Y direction  
+            const yAxis = new Cesium.Entity({
+                name: 'Y-Axis Rotation Control',
+                position: center,
+                cylinder: {
+                    length: 150.0,
+                    topRadius: 5.0,
+                    bottomRadius: 5.0,
+                    material: Cesium.Color.LIME,
+                    outline: true,
+                    outlineColor: Cesium.Color.DARKGREEN
+                },
+                orientation: Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_X, -Cesium.Math.PI_OVER_TWO), // Rotate to align with Y
+                userData: { axis: 'y' }
+            });
+            
+            // Z-axis (Blue) - extends in local Z direction (up)
+            const zAxis = new Cesium.Entity({
+                name: 'Z-Axis Rotation Control',
+                position: center,
+                cylinder: {
+                    length: 150.0,
+                    topRadius: 5.0,
+                    bottomRadius: 5.0,
+                    material: Cesium.Color.BLUE,
+                    outline: true,
+                    outlineColor: Cesium.Color.DARKBLUE
+                },
+                orientation: Cesium.Quaternion.IDENTITY, // Already aligned with Z (up)
+                userData: { axis: 'z' }
+            });
+            
+            axesDataSource.entities.add(xAxis);
+            axesDataSource.entities.add(yAxis);
+            axesDataSource.entities.add(zAxis);
+            viewer.dataSources.add(axesDataSource);
+            
+            localRotationControls = axesDataSource;
+            console.log('📐 Local rotation control axes created (Red=X, Green=Y, Blue=Z)');
+        }
+
+        // Initialize rotation sheet from SPZ's actual transform matrix
+        function initializeRotationSheetFromSPZ() {
+            if (!rotationSheet || rotationSheet.entities.values.length === 0 || !currentTileset) {
+                console.warn('Cannot initialize rotation sheet from SPZ - missing components');
+                return;
+            }
+
+            // Get the box entity (cyan sheet)
+            const boxEntity = rotationSheet.entities.values[0];
+            
+            // Extract rotation matrix directly from SPZ's transform
+            const spzTransform = currentTileset.root.transform;
+            console.log('🔄 Extracting rotation directly from SPZ transform matrix:', spzTransform);
+            
+            // Extract the 3x3 rotation matrix (upper-left of the 4x4 matrix)
+            // Remove scale by normalizing the column vectors
+            const col1 = new Cesium.Cartesian3(spzTransform[0], spzTransform[1], spzTransform[2]);
+            const col2 = new Cesium.Cartesian3(spzTransform[4], spzTransform[5], spzTransform[6]);
+            const col3 = new Cesium.Cartesian3(spzTransform[8], spzTransform[9], spzTransform[10]);
+            
+            // Get scale factors
+            const scaleX = Cesium.Cartesian3.magnitude(col1);
+            const scaleY = Cesium.Cartesian3.magnitude(col2);
+            const scaleZ = Cesium.Cartesian3.magnitude(col3);
+            
+            console.log('Extracted scale factors:', { scaleX, scaleY, scaleZ });
+            
+            // Normalize to get pure rotation matrix
+            const normalizedCol1 = Cesium.Cartesian3.divideByScalar(col1, scaleX, new Cesium.Cartesian3());
+            const normalizedCol2 = Cesium.Cartesian3.divideByScalar(col2, scaleY, new Cesium.Cartesian3());
+            const normalizedCol3 = Cesium.Cartesian3.divideByScalar(col3, scaleZ, new Cesium.Cartesian3());
+            
+            // Create pure rotation Matrix3
+            const rotationMatrix3 = new Cesium.Matrix3(
+                normalizedCol1.x, normalizedCol2.x, normalizedCol3.x,
+                normalizedCol1.y, normalizedCol2.y, normalizedCol3.y,
+                normalizedCol1.z, normalizedCol2.z, normalizedCol3.z
+            );
+            
+            console.log('Pure rotation matrix extracted from SPZ:', rotationMatrix3);
+            
+            // Convert to quaternion
+            const quaternion = Cesium.Quaternion.fromRotationMatrix(rotationMatrix3);
+            console.log('Converted to quaternion:', quaternion);
+            
+            // Apply to rotation sheet
+            boxEntity.orientation = quaternion;
+            
+            // Keep cyan color (not orange)
+            boxEntity.box.material = Cesium.Color.CYAN.withAlpha(0.8);
+            
+            console.log('✅ Rotation sheet initialized from SPZ transform matrix');
+        }
+
+        // Update rotation sheet to match current rotation controls
+        function updateRotationSheet() {
+            if (!rotationSheet || rotationSheet.entities.values.length === 0) {
+                return;
+            }
+
+            // Get the box entity (cyan sheet)
+            const boxEntity = rotationSheet.entities.values[0];
+            
+            // Get rotation values from controls
+            const rotX = parseFloat(document.getElementById('rotX').value || 0);
+            const rotY = parseFloat(document.getElementById('rotY').value || 0);
+            const rotZ = parseFloat(document.getElementById('rotZ').value || 0);
+
+            // Create individual rotation matrices for world space (same as export function)
+            const rotXMatrix = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(rotX));
+            const rotYMatrix = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(rotY));
+            const rotZMatrix = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(rotZ));
+            
+            // Apply rotations in order: Z, Y, X (world space) - same as export function
+            let combinedRotation = Cesium.Matrix3.IDENTITY.clone();
+            combinedRotation = Cesium.Matrix3.multiply(combinedRotation, rotZMatrix, combinedRotation);
+            combinedRotation = Cesium.Matrix3.multiply(combinedRotation, rotYMatrix, combinedRotation);
+            combinedRotation = Cesium.Matrix3.multiply(combinedRotation, rotXMatrix, combinedRotation);
+            
+            // Convert rotation matrix to quaternion for entity orientation
+            const quaternion = Cesium.Quaternion.fromRotationMatrix(combinedRotation);
+            
+            // Apply rotation to the cyan sheet
+            boxEntity.orientation = quaternion;
+            
+            // Also update local rotation control axes to match sheet rotation
+            updateLocalRotationControls(quaternion);
+            
+            // Keep cyan color always (no color changes)
+            boxEntity.box.material = Cesium.Color.CYAN.withAlpha(0.8);
+            
+            console.log('📐 Applied world-space rotation to sheet and axes:', { rotX, rotY, rotZ });
+        }
+        
+        // Update local rotation control axes to match sheet rotation
+        function updateLocalRotationControls(sheetQuaternion) {
+            if (!localRotationControls || localRotationControls.entities.values.length < 3) {
+                return;
+            }
+            
+            // Get the three axes
+            const xAxis = localRotationControls.entities.values[0]; // Red
+            const yAxis = localRotationControls.entities.values[1]; // Green  
+            const zAxis = localRotationControls.entities.values[2]; // Blue
+            
+            // Apply sheet rotation to each axis, but maintain their relative orientations
+            // X-axis: sheet rotation + 90° around Z
+            const xAxisBase = Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_Z, Cesium.Math.PI_OVER_TWO);
+            xAxis.orientation = Cesium.Quaternion.multiply(sheetQuaternion, xAxisBase, new Cesium.Quaternion());
+            
+            // Y-axis: sheet rotation + -90° around X
+            const yAxisBase = Cesium.Quaternion.fromAxisAngle(Cesium.Cartesian3.UNIT_X, -Cesium.Math.PI_OVER_TWO);
+            yAxis.orientation = Cesium.Quaternion.multiply(sheetQuaternion, yAxisBase, new Cesium.Quaternion());
+            
+            // Z-axis: just the sheet rotation (already aligned with Z)
+            zAxis.orientation = sheetQuaternion;
+        }
+        
+        // Apply local rotation during drag (visual only, don't update controls)
+        function applyLocalRotationDrag(axis, deltaAngle) {
+            accumulatedDragRotation += deltaAngle;
+            
+            // Only update the visual rotation sheet, not the controls
+            updateRotationSheetWithLocalRotation(axis, accumulatedDragRotation);
+            
+            console.log(`🔄 Dragging ${axis.toUpperCase()}-axis: ${deltaAngle.toFixed(2)}° (total: ${accumulatedDragRotation.toFixed(2)}°)`);
+        }
+        
+        // Update only the rotation sheet with local rotation (not controls)
+        function updateRotationSheetWithLocalRotation(axis, totalAngle) {
+            if (!rotationSheet || rotationSheet.entities.values.length === 0) {
+                return;
+            }
+
+            // Get the box entity (cyan sheet)
+            const boxEntity = rotationSheet.entities.values[0];
+            
+            // Get the starting world-space rotation from when drag began
+            const startRotX = dragStartRotation.x;
+            const startRotY = dragStartRotation.y;
+            const startRotZ = dragStartRotation.z;
+
+            // Create starting world-space rotation matrix
+            const worldRotXMatrix = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(startRotX));
+            const worldRotYMatrix = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(startRotY));
+            const worldRotZMatrix = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(startRotZ));
+            
+            let worldRotMatrix = Cesium.Matrix3.IDENTITY.clone();
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotZMatrix, worldRotMatrix);
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotYMatrix, worldRotMatrix);
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotXMatrix, worldRotMatrix);
+            
+            // Create local rotation for the dragged axis
+            let localRotMatrix;
+            switch(axis) {
+                case 'x':
+                    localRotMatrix = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(totalAngle));
+                    break;
+                case 'y':
+                    localRotMatrix = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(totalAngle));
+                    break;
+                case 'z':
+                    localRotMatrix = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(totalAngle));
+                    break;
+            }
+            
+            // Combine: world rotation + local rotation
+            const combinedMatrix = Cesium.Matrix3.multiply(worldRotMatrix, localRotMatrix, new Cesium.Matrix3());
+            
+            // Convert to quaternion and apply to sheet
+            const quaternion = Cesium.Quaternion.fromRotationMatrix(combinedMatrix);
+            boxEntity.orientation = quaternion;
+            
+            // Update local rotation control axes to match
+            updateLocalRotationControls(quaternion);
+        }
+        
+        // Finalize local rotation and update world-space controls (called on mouse release)
+        function finalizeLocalRotation(axis, totalAngle) {
+            console.log(`🎯 Finalizing ${axis.toUpperCase()}-axis rotation: ${totalAngle.toFixed(2)}°`);
+            
+            // Get the starting world-space rotation
+            const startRotX = dragStartRotation.x;
+            const startRotY = dragStartRotation.y;
+            const startRotZ = dragStartRotation.z;
+
+            // Create starting world-space rotation matrix
+            const worldRotXMatrix = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(startRotX));
+            const worldRotYMatrix = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(startRotY));
+            const worldRotZMatrix = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(startRotZ));
+            
+            let worldRotMatrix = Cesium.Matrix3.IDENTITY.clone();
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotZMatrix, worldRotMatrix);
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotYMatrix, worldRotMatrix);
+            worldRotMatrix = Cesium.Matrix3.multiply(worldRotMatrix, worldRotXMatrix, worldRotMatrix);
+            
+            // Create local rotation for the dragged axis
+            let localRotMatrix;
+            switch(axis) {
+                case 'x':
+                    localRotMatrix = Cesium.Matrix3.fromRotationX(Cesium.Math.toRadians(totalAngle));
+                    break;
+                case 'y':
+                    localRotMatrix = Cesium.Matrix3.fromRotationY(Cesium.Math.toRadians(totalAngle));
+                    break;
+                case 'z':
+                    localRotMatrix = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(totalAngle));
+                    break;
+            }
+            
+            // Combine: world rotation + local rotation
+            const combinedMatrix = Cesium.Matrix3.multiply(worldRotMatrix, localRotMatrix, new Cesium.Matrix3());
+            
+            // Convert back to Euler angles
+            const sy = Math.sqrt(combinedMatrix[0] * combinedMatrix[0] + combinedMatrix[3] * combinedMatrix[3]);
+            const singular = sy < 1e-6;
+            
+            let newRotX, newRotY, newRotZ;
+            if (!singular) {
+                newRotX = Math.atan2(combinedMatrix[7], combinedMatrix[8]) * 180 / Math.PI;
+                newRotY = Math.atan2(-combinedMatrix[6], sy) * 180 / Math.PI;
+                newRotZ = Math.atan2(combinedMatrix[3], combinedMatrix[0]) * 180 / Math.PI;
+            } else {
+                newRotX = Math.atan2(-combinedMatrix[5], combinedMatrix[4]) * 180 / Math.PI;
+                newRotY = Math.atan2(-combinedMatrix[6], sy) * 180 / Math.PI;
+                newRotZ = 0;
+            }
+            
+            // Update the transform controls with new world-space values
+            document.getElementById('rotX').value = newRotX.toFixed(1);
+            document.getElementById('rotY').value = newRotY.toFixed(1);
+            document.getElementById('rotZ').value = newRotZ.toFixed(1);
+            document.getElementById('rotXVal').value = newRotX.toFixed(1);
+            document.getElementById('rotYVal').value = newRotY.toFixed(1);
+            document.getElementById('rotZVal').value = newRotZ.toFixed(1);
+            
+            // Final update to the rotation sheet using the normal method
+            updateRotationSheet();
+            
+            console.log(`📐 Updated world controls: X=${newRotX.toFixed(1)}°, Y=${newRotY.toFixed(1)}°, Z=${newRotZ.toFixed(1)}°`);
+        }
+
+        // Test function to manually trigger transform update
+        function testTransformUpdate() {
+            console.log('🧪 Test Transform Update');
+            updateStatus('Testing transform update...');
+            
+            // Set a visible change
+            document.getElementById('posZ').value = 50;
+            document.getElementById('rotZ').value = 45;
+            document.getElementById('scaleX').value = 2;
+            
+            updateTransform();
+        }
+        
+        // Test function for world-space rotation using HeadingPitchRoll
+        function testWorldRotation() {
+            console.log('🌍 Test World Rotation with HeadingPitchRoll');
+            updateStatus('Testing HeadingPitchRoll rotation...');
+            
+            if (!currentTileset) {
+                updateStatus('❌ No tileset loaded');
+                return;
+            }
+            
+            // Test HeadingPitchRoll approach like the working example
+            const position = Cesium.Cartesian3.fromDegrees(-81.65699333, 28.52165138, 6.08);
+            
+            // Apply 90 degree heading (rotation around vertical axis)
+            const heading = Cesium.Math.toRadians(90);
+            const pitch = 0;
+            const roll = 0;
+            
+            const hpr = new Cesium.HeadingPitchRoll(heading, pitch, roll);
+            const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr);
+            
+            const transform = Cesium.Matrix4.fromRotationTranslation(
+                Cesium.Matrix3.fromQuaternion(orientation),
+                position
+            );
+            
+            // Apply to root.transform approach
+            currentTileset.root.transform = transform;
+            updateStatus('Applied 90° test to tileset.root.transform');
+            
+            console.log('Applied 90° HeadingPitchRoll test:', { heading: 90, pitch: 0, roll: 0 });
+        }
+        
+        // Explore tileset structure to find all transform properties
+        function exploreTilesetStructure() {
+            console.log('🔍 === TILESET STRUCTURE EXPLORATION ===');
+            
+            if (!currentTileset) {
+                console.log('❌ No tileset loaded');
+                updateStatus('❌ No tileset to explore');
+                return;
+            }
+            
+            console.log('Tileset object:', currentTileset);
+            console.log('Tileset properties:', Object.keys(currentTileset));
+            
+            // Explore root properties
+            if (currentTileset.root) {
+                console.log('Root object:', currentTileset.root);
+                console.log('Root properties:', Object.keys(currentTileset.root));
+                console.log('Root.transform:', currentTileset.root.transform);
+                console.log('Root.computedTransform:', currentTileset.root.computedTransform);
+                
+                // Check if root has content
+                if (currentTileset.root.content) {
+                    console.log('Root.content:', currentTileset.root.content);
+                    console.log('Root.content properties:', Object.keys(currentTileset.root.content));
+                }
+            }
+            
+            // Check for other transform-related properties
+            console.log('modelMatrix (should not be used):', currentTileset.modelMatrix);
+            console.log('Note: We only use tileset.root.transform to avoid double transforms');
+            console.log('clippingPlanes:', currentTileset.clippingPlanes);
+            
+            // Look for any transform-related properties
+            const transformProperties = Object.keys(currentTileset).filter(key => 
+                key.toLowerCase().includes('transform') || 
+                key.toLowerCase().includes('matrix') ||
+                key.toLowerCase().includes('rotation') ||
+                key.toLowerCase().includes('scale')
+            );
+            console.log('Transform-related properties:', transformProperties);
+            
+            updateStatus('🔍 Tileset structure explored - check console');
+        }
+        
+        // Log current state for debugging
+        function logCurrentState() {
+            console.log('=== CURRENT STATE DEBUG ===');
+            console.log('currentTileset:', currentTileset);
+            console.log('baseTransform:', baseTransform);
+            
+            if (currentTileset) {
+                console.log('tileset.modelMatrix (not used):', currentTileset.modelMatrix);
+                console.log('Note: Only tileset.root.transform is used to avoid double transforms');
+                console.log('tileset.boundingSphere:', currentTileset.boundingSphere);
+                console.log('tileset.ready:', currentTileset.ready);
+                console.log('tileset.show:', currentTileset.show);
+                
+                if (currentTileset.root) {
+                    console.log('tileset.root.transform:', currentTileset.root.transform);
+                    console.log('tileset.root.computedTransform:', currentTileset.root.computedTransform);
+                }
+            }
+            
+            // Log all transform control values
+            const controls = ['posX', 'posY', 'posZ', 'rotX', 'rotY', 'rotZ', 'scaleX', 'scaleY', 'scaleZ'];
+            const values = {};
+            controls.forEach(id => {
+                const element = document.getElementById(id);
+                values[id] = element ? element.value : 'NOT FOUND';
+            });
+            console.log('Control values:', values);
+            
+            // ROTATION SHEET DETAILED ANALYSIS
+            console.log('\n🔍 === ROTATION SHEET ANALYSIS ===');
+            if (rotationSheet && rotationSheet.entities.values.length > 0) {
+                const boxEntity = rotationSheet.entities.values[0];
+                console.log('Rotation sheet entity:', boxEntity);
+                console.log('Box entity position:', boxEntity.position);
+                console.log('Box entity orientation property:', boxEntity.orientation);
+                
+                // Get the actual orientation value
+                let actualOrientation = null;
+                if (boxEntity.orientation instanceof Cesium.ConstantProperty) {
+                    actualOrientation = boxEntity.orientation.getValue(viewer.clock.currentTime);
+                    console.log('Orientation is ConstantProperty, extracted value:', actualOrientation);
+                } else {
+                    actualOrientation = boxEntity.orientation;
+                    console.log('Orientation is direct value:', actualOrientation);
+                }
+                
+                // Convert quaternion to matrix to see what rotation it represents
+                if (actualOrientation && actualOrientation instanceof Cesium.Quaternion) {
+                    const rotMatrix = Cesium.Matrix3.fromQuaternion(actualOrientation);
+                    console.log('Quaternion as rotation matrix:', rotMatrix);
+                    
+                    // Try to convert back to Euler angles for comparison
+                    try {
+                        const sy = Math.sqrt(rotMatrix[0] * rotMatrix[0] + rotMatrix[3] * rotMatrix[3]);
+                        const singular = sy < 1e-6;
+                        
+                        let rotX, rotY, rotZ;
+                        if (!singular) {
+                            rotX = Math.atan2(rotMatrix[7], rotMatrix[8]) * 180 / Math.PI;
+                            rotY = Math.atan2(-rotMatrix[6], sy) * 180 / Math.PI;
+                            rotZ = Math.atan2(rotMatrix[3], rotMatrix[0]) * 180 / Math.PI;
+                        } else {
+                            rotX = Math.atan2(-rotMatrix[5], rotMatrix[4]) * 180 / Math.PI;
+                            rotY = Math.atan2(-rotMatrix[6], sy) * 180 / Math.PI;
+                            rotZ = 0;
+                        }
+                        console.log('Sheet rotation as Euler angles (approximate):', { rotX, rotY, rotZ });
+                    } catch (e) {
+                        console.warn('Could not convert sheet rotation to Euler:', e);
+                    }
+                }
+                
+                // Check sheet's actual transform in the scene
+                console.log('Sheet material color:', boxEntity.box.material);
+                console.log('Sheet dimensions:', boxEntity.box.dimensions);
+                
+            } else {
+                console.log('❌ No rotation sheet active');
+            }
+            
+            // COMPARE SPZ vs SHEET TRANSFORMS
+            console.log('\n🔄 === SPZ vs SHEET COMPARISON ===');
+            if (currentTileset && rotationSheet && rotationSheet.entities.values.length > 0) {
+                const spzTransform = currentTileset.root.transform;
+                console.log('SPZ transform matrix:', spzTransform);
+                
+                // Extract SPZ rotation matrix
+                const spzCol1 = new Cesium.Cartesian3(spzTransform[0], spzTransform[1], spzTransform[2]);
+                const spzCol2 = new Cesium.Cartesian3(spzTransform[4], spzTransform[5], spzTransform[6]);
+                const spzCol3 = new Cesium.Cartesian3(spzTransform[8], spzTransform[9], spzTransform[10]);
+                
+                const spzScaleX = Cesium.Cartesian3.magnitude(spzCol1);
+                const spzScaleY = Cesium.Cartesian3.magnitude(spzCol2);
+                const spzScaleZ = Cesium.Cartesian3.magnitude(spzCol3);
+                
+                console.log('SPZ scale factors:', { spzScaleX, spzScaleY, spzScaleZ });
+                
+                // Normalize to get pure rotation
+                const spzNormCol1 = Cesium.Cartesian3.divideByScalar(spzCol1, spzScaleX, new Cesium.Cartesian3());
+                const spzNormCol2 = Cesium.Cartesian3.divideByScalar(spzCol2, spzScaleY, new Cesium.Cartesian3());
+                const spzNormCol3 = Cesium.Cartesian3.divideByScalar(spzCol3, spzScaleZ, new Cesium.Cartesian3());
+                
+                const spzRotMatrix = new Cesium.Matrix3(
+                    spzNormCol1.x, spzNormCol2.x, spzNormCol3.x,
+                    spzNormCol1.y, spzNormCol2.y, spzNormCol3.y,
+                    spzNormCol1.z, spzNormCol2.z, spzNormCol3.z
+                );
+                
+                console.log('SPZ pure rotation matrix:', spzRotMatrix);
+                
+                const spzQuaternion = Cesium.Quaternion.fromRotationMatrix(spzRotMatrix);
+                console.log('SPZ rotation as quaternion:', spzQuaternion);
+                
+                // Get sheet quaternion for comparison
+                const boxEntity = rotationSheet.entities.values[0];
+                const sheetOrientation = boxEntity.orientation instanceof Cesium.ConstantProperty ? 
+                    boxEntity.orientation.getValue(viewer.clock.currentTime) : boxEntity.orientation;
+                    
+                console.log('Sheet quaternion:', sheetOrientation);
+                
+                // Compare quaternions
+                if (spzQuaternion && sheetOrientation) {
+                    const dotProduct = spzQuaternion.x * sheetOrientation.x + 
+                                    spzQuaternion.y * sheetOrientation.y + 
+                                    spzQuaternion.z * sheetOrientation.z + 
+                                    spzQuaternion.w * sheetOrientation.w;
+                    console.log('Quaternion similarity (dot product):', dotProduct, '(1.0 = identical, -1.0 = opposite)');
+                }
+            }
+            
+            updateStatus('🔍 Detailed state logged to console - check rotation sheet analysis');
+        }
+        
+        // Toggle marker placement mode
+        function toggleMarkerMode() {
+            markerMode = !markerMode;
+            
+            // Find the marker button by searching for the one with marker text
+            const buttons = document.querySelectorAll('button');
+            let markerButton = null;
+            for (let button of buttons) {
+                if (button.textContent.includes('Place Marker') || button.textContent.includes('Marker Mode')) {
+                    markerButton = button;
+                    break;
+                }
+            }
+            
+            if (markerMode) {
+                if (markerButton) {
+                    markerButton.style.backgroundColor = '#4a7c59';
+                    markerButton.textContent = '📍 Marker Mode: ON (M)';
+                }
+                updateStatus('📍 Marker mode enabled - click anywhere to place markers');
+                
+                // Initialize marker data source if needed
+                if (!markerDataSource) {
+                    markerDataSource = new Cesium.CustomDataSource('positioningMarkers');
+                    viewer.dataSources.add(markerDataSource);
+                }
+            } else {
+                if (markerButton) {
+                    markerButton.style.backgroundColor = '#48b';
+                    markerButton.textContent = '📍 Place Marker (M key)';
+                }
+                updateStatus('📍 Marker mode disabled');
+            }
+        }
+        
+        // Place a marker at the clicked position
+        function placeMarker(position) {
+            if (!markerDataSource) {
+                markerDataSource = new Cesium.CustomDataSource('positioningMarkers');
+                viewer.dataSources.add(markerDataSource);
+            }
+            
+            markerCount++;
+            const markerEntity = new Cesium.Entity({
+                name: `Marker ${markerCount}`,
+                position: position,
+                cylinder: {
+                    length: 100.0, // 100m tall thin marker
+                    topRadius: 2.0,
+                    bottomRadius: 2.0,
+                    material: Cesium.Color.YELLOW.withAlpha(0.8),
+                    outline: true,
+                    outlineColor: Cesium.Color.BLACK
+                },
+                label: {
+                    text: `M${markerCount}`,
+                    font: '14pt monospace',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    pixelOffset: new Cesium.Cartesian2(0, -50),
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                }
+            });
+            
+            markerDataSource.entities.add(markerEntity);
+            
+            // Log position for reference
+            const cartographic = Cesium.Cartographic.fromCartesian(position);
+            const longitude = Cesium.Math.toDegrees(cartographic.longitude);
+            const latitude = Cesium.Math.toDegrees(cartographic.latitude);
+            const height = cartographic.height;
+            
+            console.log(`📍 Placed Marker ${markerCount} at:`, {
+                longitude: longitude.toFixed(8),
+                latitude: latitude.toFixed(8),
+                height: height.toFixed(2)
+            });
+            
+            updateStatus(`📍 Placed Marker ${markerCount} at ${longitude.toFixed(6)}, ${latitude.toFixed(6)}, ${height.toFixed(1)}m`);
+        }
+        
+        // Clear all markers
+        function clearMarkers() {
+            if (markerDataSource) {
+                markerDataSource.entities.removeAll();
+                markerCount = 0;
+                updateStatus('📍 All markers cleared');
+            }
+        }
+        
+        // Initialize mouse click handler for marker placement
+        viewer.cesiumWidget.canvas.addEventListener('click', function(event) {
+            if (!markerMode) return;
+            
+            const pick = viewer.camera.getPickRay(new Cesium.Cartesian2(event.clientX, event.clientY));
+            const position = viewer.scene.globe.pick(pick, viewer.scene);
+            
+            if (position) {
+                placeMarker(position);
+            }
+        });
+        
+        // Mouse handlers for local rotation control interaction
+        let rotationHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        
+        rotationHandler.setInputAction(function(event) {
+            if (markerMode || !localRotationControls) return;
+            
+            const pick = viewer.scene.pick(event.position);
+            console.log('Picked object:', pick); // Debug log
+            
+            if (pick && pick.id && pick.id.userData && pick.id.userData.axis) {
+                isDragging = true;
+                dragAxis = pick.id.userData.axis;
+                lastMousePosition = event.position.clone();
+                accumulatedDragRotation = 0; // Reset accumulator
+                
+                // Store starting rotation values
+                dragStartRotation.x = parseFloat(document.getElementById('rotX').value || 0);
+                dragStartRotation.y = parseFloat(document.getElementById('rotY').value || 0);
+                dragStartRotation.z = parseFloat(document.getElementById('rotZ').value || 0);
+                
+                // Disable all camera controls during drag
+                viewer.scene.screenSpaceCameraController.enableRotate = false;
+                viewer.scene.screenSpaceCameraController.enableTranslate = false;
+                viewer.scene.screenSpaceCameraController.enableZoom = false;
+                viewer.scene.screenSpaceCameraController.enableTilt = false;
+                viewer.scene.screenSpaceCameraController.enableLook = false;
+                
+                console.log(`🎯 Started dragging ${dragAxis.toUpperCase()}-axis (${pick.id.userData.axis}) for local rotation`);
+                console.log(`Starting rotation: X=${dragStartRotation.x}°, Y=${dragStartRotation.y}°, Z=${dragStartRotation.z}°`);
+                updateStatus(`🎯 Dragging ${dragAxis.toUpperCase()}-axis - move mouse to rotate locally`);
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+        
+        rotationHandler.setInputAction(function(event) {
+            if (!isDragging || !dragAxis || !lastMousePosition) return;
+            
+            const currentMousePosition = event.endPosition;
+            const deltaX = currentMousePosition.x - lastMousePosition.x;
+            const deltaY = currentMousePosition.y - lastMousePosition.y;
+            
+            // Calculate rotation delta based on mouse movement
+            // Use the larger movement component for the rotation
+            const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : -deltaY;
+            const rotationSensitivity = 0.5; // degrees per pixel
+            const deltaAngle = delta * rotationSensitivity;
+            
+            if (Math.abs(deltaAngle) > 0.1) { // Only apply significant movements
+                applyLocalRotationDrag(dragAxis, deltaAngle);
+                lastMousePosition = currentMousePosition.clone();
+            }
+        }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+        
+        rotationHandler.setInputAction(function(event) {
+            if (isDragging) {
+                // Finalize the rotation and update controls
+                finalizeLocalRotation(dragAxis, accumulatedDragRotation);
+                
+                isDragging = false;
+                dragAxis = null;
+                lastMousePosition = null;
+                accumulatedDragRotation = 0;
+                
+                // Re-enable all camera controls
+                viewer.scene.screenSpaceCameraController.enableRotate = true;
+                viewer.scene.screenSpaceCameraController.enableTranslate = true;
+                viewer.scene.screenSpaceCameraController.enableZoom = true;
+                viewer.scene.screenSpaceCameraController.enableTilt = true;
+                viewer.scene.screenSpaceCameraController.enableLook = true;
+                
+                console.log('🎯 Finished local rotation drag');
+                updateStatus('🎯 Local rotation drag completed - controls updated');
+            }
+        }, Cesium.ScreenSpaceEventType.LEFT_UP);
+        
+        // Initialize keyboard handler for 'M' key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'M' || event.key === 'm') {
+                toggleMarkerMode();
+                event.preventDefault();
+            }
+        });
+        
+        window.showDiagnostics = function() {
+            console.log('🔍 SPZ Diagnostics:');
+            console.log('GaussianSplat3DTileContent available:', typeof Cesium.GaussianSplat3DTileContent !== 'undefined');
+            console.log('GaussianSplatPrimitive available:', typeof Cesium.GaussianSplatPrimitive !== 'undefined');
+            console.log('SharedArrayBuffer available:', typeof SharedArrayBuffer !== 'undefined');
+            console.log('Cross-origin isolated:', window.crossOriginIsolated);
+            
+            const tilesets = [];
+            for (let i = 0; i < viewer.scene.primitives.length; i++) {
+                const primitive = viewer.scene.primitives.get(i);
+                if (primitive instanceof Cesium.Cesium3DTileset) {
+                    tilesets.push({
+                        index: i,
+                        url: primitive.url,
+                        ready: primitive.ready,
+                        show: primitive.show,
+                        memoryUsage: primitive.totalMemoryUsageInBytes,
+                        contentType: primitive.root.content?.constructor.name,
+                        rootTransform: primitive.root?.transform,
+                        modelMatrix: primitive.modelMatrix + ' (not used - only root.transform)'
+                    });
+                }
+            }
+            
+            console.log('Current tilesets:', tilesets);
+            console.log('Transform control state:');
+            logCurrentState();
+            
+            updateStatus(`Found ${tilesets.length} tileset(s) - see console for details`);
+        };
+        
+        updateStatus('SPZ Transform Editor ready!');
+        
+        // Initialize transform controls
+        initializeTransformControls();
+        
+        // Auto-load SPZ + GeoJSON functionality
+        window.loadOriginalSPZAndGeoJSON = async function() {
+            try {
+                disableAllButtons();
+                updateStatus('Loading both SPZ and Reference GeoJSON at original positions...');
+                
+                // First load the GeoJSON
+                const geoJsonDataSource = await Cesium.GeoJsonDataSource.load('./reference.geojson', {
+                    clampToGround: true,
+                    stroke: Cesium.Color.CYAN,
+                    strokeWidth: 2,
+                    fill: Cesium.Color.CYAN.withAlpha(0.2)
+                });
+                viewer.dataSources.add(geoJsonDataSource);
+                updateStatus('GeoJSON loaded, now loading SPZ...');
+                
+                // Then load the SPZ with its original transform (no corrections)
+                const tileset = await Cesium.Cesium3DTileset.fromUrl('./tileset.json', {
+                    debugTreatTilesetAsGaussianSplats: true
+                });
+                viewer.scene.primitives.add(tileset);
+                await tileset.readyPromise;
+                
+                console.log('SPZ loaded with original embedded transform:', tileset.root.transform);
+                updateStatus('SPZ loaded at original position - use transform controls to position manually');
+                
+                // Zoom to show both
+                await viewer.zoomTo(geoJsonDataSource);
+                
+                // Verify SPZ content
+                const content = tileset.root.content;
+                const isGaussianSplat = content instanceof Cesium.GaussianSplat3DTileContent;
+                
+                updateStatus(`✅ Both loaded at original positions! SPZ: ${isGaussianSplat ? 'Gaussian Splat' : 'Other'}, GeoJSON: ${geoJsonDataSource.entities.values.length} features`);
+                
+                // Setup transform controls with no automatic positioning
+                console.log('🔧 Setting up transform controls for tileset:', tileset);
+                await setupTransformControls(tileset, null);
+                
+                console.log('Original loading results:', {
+                    spzContentType: content?.constructor.name,
+                    spzIsGaussianSplat: isGaussianSplat,
+                    spzMemoryUsage: (tileset.totalMemoryUsageInBytes / 1024).toFixed(1) + ' KB',
+                    geojsonFeatures: geoJsonDataSource.entities.values.length,
+                    positioning: 'No automatic positioning - manual controls enabled',
+                    originalTransform: tileset.root.transform
+                });
+                
+            } catch (error) {
+                updateStatus(`❌ Error loading original SPZ + GeoJSON: ${error.message}`);
+                console.error('Original loading error:', error);
+            } finally {
+                enableAllButtons();
+            }
+        };
+
+        // Auto-load SPZ + GeoJSON at original positions
+        setTimeout(() => {
+            updateStatus('Auto-loading SPZ + GeoJSON at original positions...');
+            loadOriginalSPZAndGeoJSON();
+        }, 1000);
+    </script>
+</body>
+</html>
