@@ -63,7 +63,7 @@ The application automatically loads content on startup:
 
 The application expects these files in the project directory:
 - `tileset.json` - 3D Tiles tileset definition
-- `content.gltf` - glTF file with SPZ extension  
+- `content.glb` - glTF file with SPZ extension  
 - `content.bin` - Binary SPZ data
 - `reference.geojson` - Reference GeoJSON for positioning context
 
