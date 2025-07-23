@@ -63,8 +63,7 @@ The application automatically loads content on startup:
 
 The application expects these files in the project directory:
 - `tileset.json` - 3D Tiles tileset definition
-- `content.glb` - glTF file with SPZ extension  
-- `content.bin` - Binary SPZ data
+- `content.glb` - glTF file with SPZ extension
 - `reference.geojson` - Reference GeoJSON for positioning context
 
 ### Transform Controls
@@ -116,7 +115,7 @@ The Flask server includes required security headers for SharedArrayBuffer suppor
 1. **Zero Memory Usage**: Ensure `debugTreatTilesetAsGaussianSplats: true` is set
 2. **Model Not Visible**: Check if model is positioned at origin (underground) 
 3. **SharedArrayBuffer Not Available**: Verify server security headers
-4. **File Not Loading**: Ensure `tileset.json`, `content.gltf`, `content.bin`, and `reference.geojson` exist in the project directory
+4. **File Not Loading**: Ensure `tileset.json`, `content.glb`, and `reference.geojson` exist in the project directory
 5. **Favicon 404 Error**: Fixed with embedded SVG favicon (📐 icon)
 6. **JavaScript Syntax Errors**: Resolved orphaned code fragments from cleanup operations
 
